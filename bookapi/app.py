@@ -1,13 +1,13 @@
-from typing import Optional
 import re
 from functools import lru_cache
 from io import BytesIO
 from pathlib import Path
+from typing import Annotated, Optional
 
 import numpy as np
 import pandas as pd
 import randimage  # type: ignore [import-untyped]
-from fastapi import FastAPI, HTTPException, Request, Response
+from fastapi import FastAPI, HTTPException, Query, Request, Response
 from PIL import Image, ImageDraw, ImageFont
 from pydantic import BaseModel
 
@@ -59,6 +59,25 @@ def book(isbn: int, request: Request) -> BookRecordWithCover:
     base_url = re.findall(r"http://([^/]+)/", str(request.url))[0]
     cover_url = f"http://{base_url}/covers/{book.isbn13}.png"
     return BookRecordWithCover(**book.model_dump(), cover_url=cover_url)
+
+
+@app.get("/many_books")
+def many_books(
+    isbn: Annotated[list[int], Query(min_length=1)], request: Request
+) -> list[BookRecordWithCover]:
+    """Use multiple query parameters"""
+    base_url = re.findall(r"http://([^/]+)/", str(request.url))[0]
+    with_cover: list[BookRecordWithCover] = []
+    for idx in isbn:
+        book = DB.get(idx)
+        if book is None:
+            raise HTTPException(
+                status_code=404, detail=f"Book not found with isbn {idx}"
+            )
+        cover_url = f"http://{base_url}/covers/{book.isbn13}.png"
+        with_cover.append(BookRecordWithCover(**book.model_dump(), cover_url=cover_url))
+    base_url = re.findall(r"http://([^/]+)/", str(request.url))[0]
+    return with_cover
 
 
 @app.get(
