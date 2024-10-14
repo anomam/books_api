@@ -1,9 +1,14 @@
-from functools import lru_cache
-from pathlib import Path
+from typing import Optional
 import re
+from functools import lru_cache
+from io import BytesIO
+from pathlib import Path
 
+import numpy as np
 import pandas as pd
+import randimage  # type: ignore [import-untyped]
 from fastapi import FastAPI, HTTPException, Request, Response
+from PIL import Image, ImageDraw, ImageFont
 from pydantic import BaseModel
 
 app = FastAPI(name="bookapi", title="Le Wagon Book API")
@@ -73,5 +78,31 @@ def get_cover(image_path: str) -> Response:
     book = DB.get(isbn)
     if book is None:
         raise HTTPException(status_code=404, detail=f"Book not found with isbn {isbn}")
-    image_bytes: bytes = b"aaffda"
+    image_bytes: bytes = _get_random_img(book.title)
     return Response(content=image_bytes, media_type="image/png")
+
+
+def _get_random_img(text: Optional[str] = None) -> bytes:
+    np_img = randimage.get_random_image((300, 300))
+    img = Image.fromarray((np_img * 255).astype(np.uint8))
+    if text:
+        _add_text(img, text)
+    buf = BytesIO()
+    img.save(buf, format="PNG")
+    buf.seek(0)
+    return buf.getvalue()
+
+
+def _add_text(img: Image.Image, text: str) -> None:
+    draw = ImageDraw.Draw(img)
+
+    position = (50, 40)  # (x, y) coordinates
+
+    try:
+        font = ImageFont.truetype("ArialBold.ttf", size=30)  # Adjust the font size
+    except IOError:
+        font = ImageFont.load_default()  # type: ignore
+
+    # Add text to the image
+    text_color = (0, 0, 0)  # RGB black color
+    draw.text(position, text, font=font, fill=text_color)
